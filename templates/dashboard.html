@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Analytics dashboard{% endblock %}
+{% block head %}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>{% endblock %}
+{% block content %}
+<section class="dashboard-page">
+  <div class="container py-4 py-lg-5">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+      <div><span class="eyebrow">GREENBASKET / ANALYTICS</span><h1 class="h2 fw-bold mt-2 mb-1">Retail insights dashboard</h1><p class="text-secondary mb-0">Welcome, {{ username }}. A snapshot of sales and inventory performance.</p></div>
+      <form method="post" action="{{ url_for('admin_logout') }}"><button class="btn btn-outline-secondary" type="submit">Sign out</button></form>
+    </div>
+    <div class="demo-banner mb-4"><span>📊</span><div><strong>Academic prototype data</strong><p class="mb-0 small">The charts use sample demonstration orders. Forecasts are illustrative, not business guarantees.</p></div></div>
+    <div class="row g-3 mb-4">
+      <div class="col-sm-6 col-xl-3"><div class="metric-card"><span class="metric-label">Active products</span><div class="metric-value">{{ stats.total_products }}</div><span class="metric-foot">Available in catalogue</span></div></div>
+      <div class="col-sm-6 col-xl-3"><div class="metric-card"><span class="metric-label">Units in stock</span><div class="metric-value">{{ stats.total_stock }}</div><span class="metric-foot">Across active products</span></div></div>
+      <div class="col-sm-6 col-xl-3"><div class="metric-card"><span class="metric-label">Completed orders</span><div class="metric-value">{{ order_stats.total_orders }}</div><span class="metric-foot">Demo order records</span></div></div>
+      <div class="col-sm-6 col-xl-3"><div class="metric-card"><span class="metric-label">Recorded revenue</span><div class="metric-value">₹{{ "{:,.0f}".format(order_stats.revenue) }}</div><span class="metric-foot">Completed orders only</span></div></div>
+    </div>
+    <div class="row g-4">
+      <div class="col-lg-7"><article class="panel h-100"><div class="panel-heading"><div><span class="analysis-tag descriptive">01 · DESCRIPTIVE</span><h2 class="h5 fw-bold mt-2">Revenue by category</h2><p class="small text-secondary mb-0">What happened? Completed sales grouped by grocery category.</p></div></div><div class="chart-box"><canvas id="categoryChart"></canvas></div></article></div>
+      <div class="col-lg-5"><article class="panel h-100"><div class="panel-heading"><div><span class="analysis-tag diagnostic">02 · DIAGNOSTIC</span><h2 class="h5 fw-bold mt-2">Top products</h2><p class="small text-secondary mb-0">Which products moved most units?</p></div></div><div class="chart-box"><canvas id="productChart"></canvas></div></article></div>
+      <div class="col-lg-7"><article class="panel h-100"><div class="panel-heading"><div><span class="analysis-tag predictive">03 · PREDICTIVE</span><h2 class="h5 fw-bold mt-2">Sales trend & simple forecast</h2><p class="small text-secondary mb-0">Past daily sales and average-based next-day estimate.</p></div></div><div class="chart-box"><canvas id="forecastChart"></canvas></div><div class="forecast-note">Illustrative next-day estimate: <strong>₹{{ "{:,.2f}".format(forecast) }}</strong></div></article></div>
+      <div class="col-lg-5"><article class="panel h-100"><div class="panel-heading"><div><span class="analysis-tag prescriptive">04 · PRESCRIPTIVE</span><h2 class="h5 fw-bold mt-2">Restock recommendations</h2><p class="small text-secondary mb-0">Suggested action based on current inventory.</p></div></div>
+        {% if low_stock %}<div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Product</th><th>Stock</th><th>Suggested action</th></tr></thead><tbody>{% for item in low_stock %}<tr><td><strong>{{ item.name }}</strong><div class="small text-secondary">{{ item.category }}</div></td><td><span class="stock-badge {% if item.stock_quantity <= 5 %}critical{% endif %}">{{ item.stock_quantity }}</span></td><td><span class="small fw-semibold">Restock {{ item.suggested_restock }}</span></td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty-state">All products have more than 10 units in stock. No restock action needed.</div>{% endif %}
+      </article></div>
+    </div>
+    <article class="panel mt-4"><div class="panel-heading"><div><h2 class="h5 fw-bold mb-1">Recent demo orders</h2><p class="small text-secondary mb-0">Latest records used by the analytics views.</p></div></div><div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Order</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead><tbody>{% for order in recent_orders %}<tr><td>#GB-{{ "%04d"|format(order.id) }}</td><td>{{ order.order_date }}</td><td>₹{{ "{:,.2f}".format(order.total_amount) }}</td><td><span class="status-pill">{{ order.status }}</span></td></tr>{% else %}<tr><td colspan="4" class="text-secondary">No orders yet.</td></tr>{% endfor %}</tbody></table></div></article>
+    <p class="small text-secondary mt-4 mb-0">Prototype note: diagnostic insights show product sales patterns; they do not prove causes without additional customer or marketing data.</p>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+const categoryLabels = {{ category_sales | map(attribute='category') | list | tojson }};
+const categoryValues = {{ category_sales | map(attribute='sales') | list | tojson }};
+const productLabels = {{ top_products | map(attribute='name') | list | tojson }};
+const productValues = {{ top_products | map(attribute='units_sold') | list | tojson }};
+const dailyLabels = {{ daily_labels | tojson }};
+const dailyValues = {{ daily_values | tojson }};
+const forecastValue = {{ forecast | tojson }};
+const green = '#287a50';
+const grid = 'rgba(35, 63, 45, 0.08)';
+Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+Chart.defaults.color = '#68756b';
+new Chart(document.getElementById('categoryChart'), {
+  type: 'bar',
+  data: { labels: categoryLabels, datasets: [{ label: 'Revenue (₹)', data: categoryValues, backgroundColor: ['#287a50','#68a878','#9bc8a4','#c9dfca'], borderRadius: 8, maxBarThickness: 46 }] },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } }, y: { beginAtZero: true, grid: { color: grid } } } }
+});
+new Chart(document.getElementById('productChart'), {
+  type: 'bar',
+  data: { labels: productLabels, datasets: [{ label: 'Units sold', data: productValues, backgroundColor: '#e8ad5c', borderRadius: 8, maxBarThickness: 32 }] },
+  options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, grid: { color: grid } }, y: { grid: { display: false } } } }
+});
+const forecastLabels = dailyLabels.length ? [...dailyLabels, 'Next-day estimate'] : ['No sales data', 'Next-day estimate'];
+const forecastData = dailyValues.length ? [...dailyValues, forecastValue] : [0, forecastValue];
+const forecastColors = forecastData.map((_, i) => i === forecastData.length - 1 ? '#e8ad5c' : green);
+new Chart(document.getElementById('forecastChart'), {
+  type: 'line',
+  data: { labels: forecastLabels, datasets: [{ label: 'Sales (₹)', data: forecastData, borderColor: green, backgroundColor: 'rgba(40,122,80,0.10)', fill: true, tension: 0.32, pointBackgroundColor: forecastColors, pointRadius: forecastData.map((_, i) => i === forecastData.length - 1 ? 6 : 3), borderDash: forecastData.map((_, i) => i === forecastData.length - 1 ? [6,4] : []) }] },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } }, y: { beginAtZero: true, grid: { color: grid } } } }
+});
+</script>
+{% endblock %}
